@@ -1,0 +1,108 @@
+---
+- name: Build Docker image for Raspberry Pi
+  hosts: all
+  become: true
+  vars:
+    images_dir: "/home/kranjuli/web-apps"
+    build_docker_images: false
+    docker_images:
+      - name: kitchen-notes
+        tag: latest
+      - name: crypto-tracker
+        tag: latest
+      - name: trade-vista
+        tag: latest
+    app_dir: "web-infra-deploy"
+
+  tasks:
+    - name: Verify Docker is installed
+      ansible.builtin.command: docker --version
+      changed_when: false
+
+    - name: Remove existing Docker containers if they exist to ensure a clean build
+      ansible.builtin.command:
+        cmd: docker compose down -v --rmi all --remove-orphans
+        chdir: "{{ images_dir }}/{{ app_dir }}"
+      ignore_errors: true
+      register: _docker_compose_down_results
+
+    - name: Show Docker compose down results
+      ansible.builtin.debug:
+        msg: >
+          {{
+            "No existing Docker containers to remove."
+            if (_docker_compose_down_results.stderr | trim == "")
+            else _docker_compose_down_results.stderr
+          }}
+
+    - name: Remove existing Docker images if they exist to ensure a clean build
+      ansible.builtin.command:
+        cmd: docker rmi {{ item.name }}:{{ item.tag }} -f
+      ignore_errors: true
+      loop: "{{ docker_images }}"
+      register: _docker_rmi_results
+
+    - name: Show Docker rmi results
+      ansible.builtin.debug:
+        msg: "Removed existing Docker image {{ item.item.name }}:{{ item.item.tag }} successfully."
+      loop: "{{ _docker_rmi_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: 
+        - _docker_rmi_results is defined
+        - _docker_rmi_results.results is defined
+
+    - name: Build Docker images from Dockerfiles
+      ansible.builtin.command:
+        cmd: >
+          docker build
+          --pull
+          --platform linux/arm64
+          -t {{ item.name }}:{{ item.tag }}
+          {{ images_dir }}/{{ item.name }}
+      environment:
+        DOCKER_BUILDKIT: "1"
+      loop: "{{ docker_images }}"
+      register: _docker_build_results
+      when: build_docker_images
+
+    - name: Display Docker build results
+      ansible.builtin.debug:
+        msg: Built Image {{ item.item.name }}:{{ item.item.tag }}
+      loop: "{{ _docker_build_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when:
+        - build_docker_images
+        - _docker_build_results is defined
+
+    - name: List Docker images to verify the build
+      ansible.builtin.command: docker images
+      register: _docker_images_output
+      changed_when: false
+      when: build_docker_images
+
+    - name: Display Docker images
+      ansible.builtin.debug:
+        var: _docker_images_output.stdout_lines
+      when: 
+        - build_docker_images
+        - _docker_images_output is defined
+
+    - name: Start Docker containers from the built images
+      ansible.builtin.command:
+        cmd: docker compose up -d --build --remove-orphans
+        chdir: "{{ images_dir }}/{{ app_dir }}"
+      environment:
+        DOCKER_BUILDKIT: "1"
+      register: _docker_compose_results
+
+    - name: Show Docker compose results
+      ansible.builtin.command:
+        cmd: docker ps
+      register: _docker_compose_results
+      changed_when: false
+
+    - name: Display Docker compose results
+      ansible.builtin.debug:
+        var: _docker_compose_results.stdout_lines

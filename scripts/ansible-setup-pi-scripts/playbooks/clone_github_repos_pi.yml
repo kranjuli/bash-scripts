@@ -1,0 +1,41 @@
+---
+- name: SSH clone GitHub Repository on Raspberry Pi
+  hosts: all
+  become: true
+  vars:
+    github_projects:
+      - repo: "git@github.com:kranjuli/kitchen-notes.git"
+        name: "kitchen-notes"
+        branch: "develop"
+      - repo: "git@github.com:kranjuli/crypto-tracker.git"
+        name: "crypto-tracker"
+        branch: "main"
+      - repo: "git@github.com:kranjuli/web-infra-deploy.git"
+        name: "web-infra-deploy"
+        branch: "develop"
+      - repo: "git@github.com:kranjuli/trade-vista.git"
+        name: "trade-vista"
+        branch: "develop"
+    github_user: "kranjuli"
+    dest_path: "/home/{{ github_user }}/web-apps"
+
+  tasks:
+    - name: SSH clone GitHub repositories
+      ansible.builtin.git:
+        repo: "{{ item.repo }}"
+        dest: "{{ dest_path }}/{{ item.name }}"
+        version: "{{ item.branch }}"
+        update: true
+        key_file: "/home/{{ github_user }}/.ssh/id_ed25519"
+      become_user: "{{ github_user }}"
+      loop: "{{ github_projects }}"
+
+    - name: Set permissions for cloned repositories
+      ansible.builtin.file:
+        path: "{{ dest_path }}/{{ item.name }}"
+        owner: "{{ github_user }}"
+        group: "{{ github_user }}"
+        state: directory
+        recurse: true
+        mode: '0755'
+      loop: "{{ github_projects }}"

@@ -1,0 +1,76 @@
+---
+- name: Mount SSD
+  hosts: all
+  become: true
+  vars:
+    mount_point: "/mnt/ssd"
+    external_hard_drive_name: "/dev/sda1"
+    # type ext4 is commonly used for external hard drives, but you should adjust this if your drive uses a different filesystem
+    external_hard_drive_mount_options: "defaults,nofail"
+    sudo_user: "kranjuli"
+
+  tasks:
+    - name: Check if the external hard drive fstype exists
+      ansible.builtin.command: lsblk {{ external_hard_drive_name }} -no FSTYPE
+      register: _hard_drive_fstype
+      changed_when: false
+
+    - name: Create mount point directory {{ mount_point }}
+      ansible.builtin.file:
+        path: "{{ mount_point }}"
+        state: directory
+        owner: "{{ sudo_user }}"
+        group: "{{ sudo_user }}"
+        mode: '0755'
+      when: _hard_drive_fstype.stdout | trim != ""
+
+    - name: Get UID of sudo user {{ sudo_user }}
+      ansible.builtin.command: id -u {{ sudo_user }}
+      register: _sudo_user_id
+      changed_when: false
+      when: _hard_drive_fstype.stdout | trim != ""
+
+    - name: Get GID of sudo user {{ sudo_user }}
+      ansible.builtin.command: id -g {{ sudo_user }}
+      register: _sudo_user_gid
+      changed_when: false
+      when: _hard_drive_fstype.stdout | trim != ""
+
+    - name: Set options for mounting the external hard drive {{ external_hard_drive_name }}
+      ansible.builtin.set_fact:
+        external_hard_drive_mount_options: "rw,nofail,uid={{ _sudo_user_id.stdout }},gid={{ _sudo_user_gid.stdout }},umask=0022"
+      when:
+        - _hard_drive_fstype.stdout | trim != ""
+        - external_hard_drive_fstype == "ntfs"
+        - _sudo_user_id is defined
+        - _sudo_user_gid is defined
+
+    - name: UUID of external hard drive is determined
+      ansible.builtin.command: lsblk {{ external_hard_drive_name }} -no UUID
+      register: _hard_drive_uuid
+      changed_when: false
+      when: _hard_drive_fstype.stdout | trim != ""
+
+    - name: Fail if UUID of external hard drive is not found
+      ansible.builtin.fail:
+        msg: "UUID of external hard drive {{ external_hard_drive_name }} not found. Cannot mount."
+      when:
+        - _hard_drive_uuid.stdout == ""
+        - _hard_drive_fstype.stdout | trim != ""
+
+    - name: Show UUID of external hard drive
+      ansible.builtin.debug:
+        msg: "UUID of external hard drive {{ external_hard_drive_name }} is {{ _hard_drive_uuid.stdout }}"
+      when: _hard_drive_uuid.stdout | trim != ""
+
+    - name: Mount the external hard drive {{ external_hard_drive_name }}
+      ansible.posix.mount:
+        path: "{{ mount_point }}"
+        src: "UUID={{ _hard_drive_uuid.stdout | trim }}"
+        fstype: "{{ external_hard_drive_fstype }}"
+        opts: "{{ external_hard_drive_mount_options }}"
+        state: mounted
+        user: "{{ sudo_user }}"
+      when:
+        - _hard_drive_fstype.stdout | trim != ""
+        - _hard_drive_uuid.stdout | trim != ""

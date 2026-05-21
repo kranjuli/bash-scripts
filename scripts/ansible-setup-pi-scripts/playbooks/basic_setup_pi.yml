@@ -1,0 +1,238 @@
+---
+- name: Basic setup for Raspberry Pi
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    upgrade_packages_clean_cache: true
+    unattended_upgrades_automatic_reboot: true
+    unattended_upgrades_automatic_reboot_time: "09:30"
+    hostname: "pi4dev"
+    sudo_users:
+      - name: "kranjuli"
+        ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIO7CPfNf9BZJ+PUbsCCbTDD1UcEVwehs5RndBTJ43+U kranjuli@kranjuli-pi"
+        ssh_private_key_path: ".ssh/kranjuli/id_ed25519"
+
+  tasks:
+    - name: OS information
+      ansible.builtin.debug:
+        msg: "OS: {{ ansible_distribution }} - {{ ansible_facts['lsb']['release'] }}"
+    - name: Stop apt timers to avoid conflicts with this playbook
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - apt-daily-upgrade.timer
+        - apt-daily.timer
+
+    - name: Upgrade OS packages
+      ansible.builtin.apt:
+        autoclean: true
+        dpkg_options: 'force-confold,force-confdef'
+        upgrade: dist
+        update_cache: true
+        lock_timeout: 600
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        NEEDRESTART_MODE: a
+      async: 3600
+      poll: 0
+      register: _os_upgrade_job
+
+    - name: Wait for upgrading of os packages to complete
+      ansible.builtin.async_status:
+        jid: "{{ _os_upgrade_job.ansible_job_id }}"
+      register: _os_upgrade_status
+      until: _os_upgrade_status.finished
+      retries: 30
+      delay: 120
+
+    - name: Check if a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+        get_checksum: false
+      register: _reboot_required_file
+
+    - name: Reboot is required
+      ansible.builtin.debug:
+        msg: "A reboot is required to complete the OS upgrade. The host will be rebooted now."
+      when: _reboot_required_file.stat.exists
+    
+    - name: The host is rebooted
+      ansible.builtin.reboot:
+      when: _reboot_required_file.stat.exists
+
+    - name: No longer required dependencies are removed
+      ansible.builtin.apt:
+        autoremove: true
+        clean: true
+      # apt might be blocked by another installation (e.g. unattended upgrades) so we want lots of retries
+      register: _results
+      until: _results is not failed
+      retries: 2
+      delay: 30
+
+    - name: Install basic APT packages
+      ansible.builtin.apt:
+        name: 
+          - unattended-upgrades
+          - apt-listchanges
+          - figlet
+          - git
+          - ntfs-3g
+        state: present
+        update_cache: true
+  
+    - name: Configure unattended-upgrades to allow automatic reboot
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+            "{{ ansible_facts.distribution }}:{{ ansible_facts.distribution_release }}-security";
+            "{{ ansible_facts.distribution }}:{{ ansible_facts.distribution_release }}-updates";
+            "{{ ansible_facts.distribution }}:{{ ansible_facts.distribution_release }}-proposed";
+            "{{ ansible_facts.distribution }}:{{ ansible_facts.distribution_release }}-backports";
+          };
+          Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades_automatic_reboot | bool | lower }}";
+          Unattended-Upgrade::Automatic-Reboot-Time "{{ unattended_upgrades_automatic_reboot_time }}";
+
+    - name: Ensure unattended-upgrades service is enabled and started
+      ansible.builtin.systemd:
+        name: unattended-upgrades
+        state: started
+        enabled: true
+
+    - name: Ensure apt-daily-upgrade.timer is enabled
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - apt-daily-upgrade.timer
+        - apt-daily.timer
+
+    - name: Remove default MOTD files
+      ansible.builtin.file:
+        path: /etc/motd
+        state: absent
+      loop:
+        - /etc/motd
+        - /etc/update-motd.d/10-help-text
+
+    - name: Delete apt cache
+      ansible.builtin.file:
+        path: /var/cache/apt/archives
+        state: absent
+      when: upgrade_packages_clean_cache
+
+    - name: Create FIGlET banner script
+      ansible.builtin.copy:
+        dest: /etc/update-motd.d/01-banner
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo -e "\e[32m"
+          figlet -c "Welcome to $(hostname)"
+          echo -e "\e[0m"
+  
+    - name: Create custom MOTD file
+      ansible.builtin.copy:
+        dest: /etc/update-motd.d/99-custom-pi-info
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          echo '-----------------------------------------------------------------------------'
+          echo "SYSTEM INFORMATION - $(date)"
+          echo "OS:         {{ ansible_distribution }} - {{ ansible_facts['lsb']['release'] }}"
+          echo "Kernel:     {{ ansible_kernel }}"
+          echo "CPU Temp:   $(cat /sys/class/thermal/thermal_zone0/temp | awk '{print $1/1000}')"
+          echo "Uptime:     $(uptime -p)"
+          echo "Hostname:   $(hostname)"
+          echo "IP Address: $(hostname -I | awk '{print $1}')"
+          echo '-----------------------------------------------------------------------------'
+
+    - name: Add sudo users on host
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: sudo
+        append: true
+        shell: /bin/bash
+        create_home: true
+      loop: "{{ sudo_users }}"
+
+    - name: Add sudo users' SSH public keys
+      ansible.builtin.authorized_key:
+        user: "{{ item.name }}"
+        state: present
+        key: "{{ item.ssh_public_key }}"
+      loop: "{{ sudo_users }}"
+
+    - name: Add sudo users's SSH private keys
+      ansible.builtin.copy:
+        src: "{{ ssh_path }}/{{ item.ssh_private_key_path }}"
+        dest: "/home/{{ item.name }}/.ssh/id_ed25519"
+        mode: '0600'
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+      when:
+        - ssh_path is defined
+        - ssh_path != ""
+      loop: "{{ sudo_users }}"
+
+    - name: Ensure sudo users have passwordless sudo access
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        regexp: '^{{ item.name }} ALL=(ALL) NOPASSWD: ALL$'
+        line: '{{ item.name }} ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+      loop: "{{ sudo_users }}"
+
+    - name: Ensure MOTD is not suppressed by hushlogin
+      ansible.builtin.file:
+        path: "/home/{{ item.name }}/.hushlogin"
+        state: absent
+      loop: "{{ sudo_users }}"
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ hostname }}"
+      register: _hostname_changed
+      when: 
+        - hostname is defined
+        - hostname != ""
+
+    - name: Replace old hostname with new hostname in /etc/hosts
+      ansible.builtin.replace:
+        path: /etc/hosts
+        regexp: '(\s+){{ ansible_hostname }}(\s+|$)'
+        replace: '\1{{ hostname }}\2'
+      when:
+        - hostname is defined
+        - hostname != ""
+
+    - name: Replace old hostname with new hostname in /etc/hostname
+      ansible.builtin.replace:
+        path: /etc/hostname
+        regexp: '^{{ ansible_hostname }}$'
+        replace: '{{ hostname }}'
+      when:
+        - hostname is defined
+        - hostname != ""
+
+    - name: Cloud-init hostname configuration is removed to prevent it from overwriting the hostname set by this playbook
+      ansible.builtin.lineinfile:
+        path: /etc/cloud/cloud.cfg
+        regexp: '^preserve_hostname:(\s*)(false)$'
+        line: 'preserve_hostname: true'
+      failed_when: false
+      when:
+        - hostname is defined
+        - hostname != ""
+
+    - name: Reboot if hostname was changed
+      ansible.builtin.reboot:
+        msg: "Rebooting to apply new hostname {{ hostname }}"
+      when:
+        - _hostname_changed.changed is defined
+        - _hostname_changed.changed
