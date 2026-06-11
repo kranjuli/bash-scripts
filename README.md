@@ -4,25 +4,26 @@ Collection of useful bash scripts
 
 ## ansible-vault
 
-### Script ansible-vault-script.sh
+### Script ansible-vault-docker.sh
 
-This script encrypts plain secrets and decrypts encrypted secrets with ansible vault
+This script encrypts plain secrets and decrypts encrypted secrets with ansible vault by using docker image `ansible`.
 
 #### Requirements:
 
-* "Vault master key" file must be present.
-* "Vault user" must be known
-* Secrets to decrypt must be added in a file and without "!vault|"
+* Docker muss be installed. Ansible Image will be downloaded and the Docker container will be created by running the script.
+* "Vault master key" files must be present.
+* "Vault User" must be known
+* Secrets to decrypt must be added in a file (i.e. `key_vault_encrypted_file`) and `without` "!vault|"
 
 #### Usage: 
 
-* Create a directory
+* Create a directory `ansible_vault`
 * Inside the directory
-  * Download the script into a directory 
-  * Create file and add the `Vault master key` into it
-  * Run the script `./ansible_vault_script.sh` help to display the usage instructions for encryption or decryption
-  * File `key_vault_encrypted` contains the encrypted secret after encryption
-  * File `key_vault_decrypted` contains the plain secret after decryption
+  * Download the script 
+  * Create folder `master_keys` and add `Vault master keys` into it
+  * Run the script `./ansible_vault_docker.sh help` to display the usage instructions for encryption or decryption
+  * **Encryption**: `./ansible_vault_docker.sh encrypt <vault_user> master_keys/<master_key_x> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Decryption**: `./ansible_vault_docker.sh decrypt <vault_user> master_keys/<master_key_x> key_vault_encrypted_file`. File `key_vault_decrypted` contains the plain secret after decryption.
 
 Structure of `ansible_vault` folder
 
@@ -31,9 +32,45 @@ ansible_vault/
   ├── ansible-vault-script.sh
   ├── key_vault_encrypted
   ├── key_vault_decrypted
-  └── master-key
+  └── master_keys/
+      ├── master_key_1
+      ├── master_key_2
+      └── master_key_3
 ```
 
+### Script ansible-vault-script.sh
+
+This script encrypts plain secrets and decrypts encrypted secrets with ansible vault.
+
+#### Requirements:
+
+* Ansible must be installed.
+* "Vault master key" files must be present.
+* "Vault user" must be known
+* Secrets to decrypt must be added in a file (i.e. `key_vault_encrypted_file`) and `without` "!vault|"
+
+#### Usage: 
+
+* Create a directory `ansible_vault`
+* Inside the directory
+  * Download the script
+  * Create folder `master_keys` and add `Vault master keys` into it.
+  * Run the script `./ansible_vault_script.sh help` to display the usage instructions for encryption or decryption
+  * **Encryption**: `./ansible_vault_script.sh encrypt <vault_user> master_keys/<master_key> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Decryption**: `./ansible_vault_script.sh decrypt <vault_user> master_keys/<master_key> key_vault_encrypted_file`. File `key_vault_decrypted` contains the plain secret after decryption.
+
+Structure of `ansible_vault` folder
+
+```
+ansible_vault/
+  ├── ansible-vault-script.sh
+  ├── key_vault_encrypted
+  ├── key_vault_decrypted
+  └── master_keys/
+      ├── master_key_1
+      ├── master_key_2
+      └── master_key_3
+```
 
 ## Git
 
