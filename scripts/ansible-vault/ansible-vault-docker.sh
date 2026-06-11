@@ -1,0 +1,87 @@
+#!/bin/bash
+
+usage() {
+  echo "Usage:"
+  echo "  $0 encrypt <vault_id_user> <vault_master_key> '<string_to_encrypt>'"
+  echo "  $0 decrypt <vault_id_user> <vault_master_key> <path_to_encrypted_file_without_!vault|>"
+  echo
+  echo "Examples:"
+  echo "  $0 encrypt user1 master_key 'my secret string'"
+  echo "  $0 decrypt user1 master_key /path/to/encrypted/file"
+  exit 1
+}
+
+run_ansible_vault() {
+
+    docker run --rm \
+        -u "$(id -u):$(id -g)" \
+        -e HOME=/work \
+        -v "$(pwd):/work" \
+        -w /work \
+        "$ANSIBLE_IMAGE" \
+        ansible-vault "$@"
+}
+
+# Check if at least 1 parameter is provided
+if [ $# -lt 1 ]; then
+  echo "ERROR: No action provided."
+  usage
+fi
+
+# Check if Docker is installed
+if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: Docker is not installed."
+    exit 1
+fi
+
+ANSIBLE_IMAGE="willhallonline/ansible:2.21-debian-trixie-slim"
+
+case "$1" in
+  help)
+    usage
+    ;;
+
+  encrypt)
+    # Check if all parameters are set
+    if [ $# -ne 4 ]; then
+      echo "ERROR: Invalid number of parameters for 'encrypt'."
+      usage
+    fi
+
+    vault_id_user="$2"
+    vault_master_key="$3"
+    string_to_encrypt="$4"
+    output_file="key_vault_encrypted"
+
+    run_ansible_vault encrypt_string --output "$output_file" --vault-id "${vault_id_user}@${vault_master_key}" "$string_to_encrypt"
+
+    echo "Encrypted string saved to file: $output_file"
+    ;;
+
+  decrypt)
+    # Check if all parameters are set
+    if [ $# -ne 4 ]; then
+      echo "ERROR: Invalid number of parameters for 'decrypt'."
+      usage
+    fi
+
+    vault_id_user="$2"
+    vault_master_key="$3"
+    encrypted_file="$4"
+    output_file="key_vault_decrypted"
+
+    if [ ! -f "$encrypted_file" ]; then
+      echo "ERROR: Encrypted file '$encrypted_file' does not exist."
+      exit 1
+    fi
+
+    run_ansible_vault decrypt --output "$output_file" --vault-id "${vault_id_user}@${vault_master_key}" "$encrypted_file"
+
+    echo "Decrypted content saved to file: $output_file"
+    ;;
+
+  *)
+    echo "ERROR: Invalid action '$1'."
+    usage
+    ;;
+esac
