@@ -2,16 +2,18 @@
 
 usage() {
   echo "Usage:"
-  echo "  $0 encrypt <vault_id_user> <vault_master_key> '<string_to_encrypt>'"
+  echo "  $0 encrypt_string <vault_id_user> <vault_master_key> '<string_to_encrypt>'"
+  echo "  $0 encrypt <vault_id_user> <vault_master_key> <path_to_file_to_encrypt>"
   echo "  $0 decrypt <vault_id_user> <vault_master_key> <path_to_encrypted_file_without_!vault|>"
   echo
   echo "Examples:"
-  echo "  $0 encrypt user1 master_key-1 'my secret string'"
+  echo "  $0 encrypt_string user1 master_key-1 'my secret string'"
+  echo "  $0 encrypt user1 master_key-1 '/path/to/file/to/encrypt'"
   echo "  $0 decrypt user1 master_key /path/to/encrypted/file"
   exit 1
 }
 
-# Prüfe, ob mindestens 1 Parameter übergeben wurde
+# Check if at least 1 parameter is provided
 if [ $# -lt 1 ]; then
   echo "ERROR: No action provided."
   usage
@@ -21,10 +23,10 @@ case "$1" in
   help)
     usage
     ;;
-  encrypt)
-    # Prüfe ob alle Parameter gesetzt sind
+  encrypt_string)
+    # Check if all parameters are set
     if [ $# -ne 4 ]; then
-      echo "ERROR: Invalid number of parameters for 'encrypt'."
+      echo "ERROR: Invalid number of parameters for 'encrypt_string'."
       usage
     fi
 
@@ -37,8 +39,24 @@ case "$1" in
 
     echo "Encrypted string saved to file: $output_file"
     ;;
+  encrypt)
+    # Check if all parameters are set
+    if [ $# -ne 4 ]; then
+      echo "ERROR: Invalid number of parameters for 'encrypt'."
+      usage
+    fi
+
+    vault_id_user="$2"
+    vault_master_key="$3"
+    file_to_encrypt="$4"
+    output_file="c"
+
+    ansible-vault encrypt "$file_to_encrypt" --output "$output_file" --vault-id "${vault_id_user}@${vault_master_key}"
+
+    echo "Encrypted file saved to: $output_file"
+    ;;
   decrypt)
-    # Prüfe ob alle Parameter gesetzt sind
+    # Check if all parameters are set
     if [ $# -ne 4 ]; then
       echo "ERROR: Invalid number of parameters for 'decrypt'."
       usage

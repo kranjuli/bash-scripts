@@ -22,7 +22,8 @@ This script encrypts plain secrets and decrypts encrypted secrets with ansible v
   * Download the script 
   * Create folder `master_keys` and add `Vault master keys` into it
   * Run the script `./ansible_vault_docker.sh help` to display the usage instructions for encryption or decryption
-  * **Encryption**: `./ansible_vault_docker.sh encrypt <vault_user> master_keys/<master_key_x> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Encryption a string**: `./ansible_vault_docker.sh encrypt_string <vault_user> master_keys/<master_key_x> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Encryption a file**: `./ansible_vault_docker.sh encrypt <vault_user> master_keys/<master_key_x> <file_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
   * **Decryption**: `./ansible_vault_docker.sh decrypt <vault_user> master_keys/<master_key_x> key_vault_encrypted_file`. File `key_vault_decrypted` contains the plain secret after decryption.
 
 Structure of `ansible_vault` folder
@@ -56,7 +57,8 @@ This script encrypts plain secrets and decrypts encrypted secrets with ansible v
   * Download the script
   * Create folder `master_keys` and add `Vault master keys` into it.
   * Run the script `./ansible_vault_script.sh help` to display the usage instructions for encryption or decryption
-  * **Encryption**: `./ansible_vault_script.sh encrypt <vault_user> master_keys/<master_key> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Encryption a string**: `./ansible_vault_script.sh encrypt_string <vault_user> master_keys/<master_key> <string_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
+  * **Encryption a file**: `./ansible_vault_script.sh encrypt <vault_user> master_keys/<master_key> <file_to_encrypt>`. File `key_vault_encrypted` contains the encrypted secret after encryption.
   * **Decryption**: `./ansible_vault_script.sh decrypt <vault_user> master_keys/<master_key> key_vault_encrypted_file`. File `key_vault_decrypted` contains the plain secret after decryption.
 
 Structure of `ansible_vault` folder
