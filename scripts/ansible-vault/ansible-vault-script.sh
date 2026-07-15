@@ -33,7 +33,7 @@ case "$1" in
     vault_id_user="$2"
     vault_master_key="$3"
     string_to_encrypt="$4"
-    output_file="c"
+    output_file="key_vault_encrypted_string"
 
     ansible-vault encrypt_string --output "$output_file" --vault-id "${vault_id_user}@${vault_master_key}" "$string_to_encrypt"
 
@@ -49,7 +49,7 @@ case "$1" in
     vault_id_user="$2"
     vault_master_key="$3"
     file_to_encrypt="$4"
-    output_file="c"
+    output_file="key_vault_encrypted_file"
 
     ansible-vault encrypt "$file_to_encrypt" --output "$output_file" --vault-id "${vault_id_user}@${vault_master_key}"
 
